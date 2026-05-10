@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 
 export const COLORS = {
-  U: '#f8f8f4', D: '#ffe14a', F: '#5cd66b', B: '#4a8eff',
+  U: '#ffe14a', D: '#f8f8f4', F: '#5cd66b', B: '#4a8eff',
   R: '#ff4d4d', L: '#ff9a3c', X: '#3a3a3f', K: '#0f0f12',
 }
 

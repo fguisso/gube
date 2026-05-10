@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e10">
+<title>Cubo Mágico 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e10;
+    --bg-soft: #17171b;
+    --bg-card: #1d1d22;
+    --line: #2a2a31;
+    --text: #f4f1ea;
+    --text-dim: #8a8a92;
+    --accent: #ffd23f;
+    --accent-hot: #ff5e3a;
+    --green: #5cd66b;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; width: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    overflow: hidden; overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background:
+      radial-gradient(circle at 20% 10%, rgba(255, 210, 63, 0.08), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(255, 94, 58, 0.06), transparent 40%),
+      var(--bg);
+    position: fixed; inset: 0;
+  }
+  #app { position: relative; height: 100%; width: 100%; overflow: hidden; }
+
+  .stage { position: absolute; inset: 0; display: flex; flex-direction: column; }
+
+  .top-bar {
+    position: relative; z-index: 5;
+    padding: calc(var(--safe-top) + 12px) 16px 8px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .preset-name-pill {
+    flex: 1; text-align: center;
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 14px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 8px;
+  }
+  .preset-name-pill .move-count {
+    display: block; font-size: 9px; letter-spacing: 0.2em; color: var(--text-dim);
+    margin-top: 2px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase;
+  }
+  .header-btn {
+    width: 38px; height: 38px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg-soft); color: var(--text);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: all 0.15s ease; font-size: 16px;
+  }
+  .header-btn:active { transform: scale(0.93); border-color: var(--accent); }
+  .header-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  .formula-display {
+    padding: 8px 16px 4px; text-align: center; position: relative; z-index: 4; flex-shrink: 0;
+  }
+  .formula-text {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; line-height: 1.5;
+    word-spacing: 0.3em; overflow-x: auto; white-space: nowrap; padding: 4px 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  .formula-text::-webkit-scrollbar { display: none; }
+  .formula-text .move {
+    display: inline-block; padding: 2px 6px; border-radius: 6px;
+    transition: all 0.3s ease; margin: 0 1px;
+  }
+  .formula-text .move.done { color: var(--text-dim); opacity: 0.4; }
+  .formula-text .move.current {
+    background: var(--accent); color: var(--bg);
+    box-shadow: 0 0 16px rgba(255, 210, 63, 0.5);
+  }
+  .formula-text .empty { color: var(--text-dim); font-style: italic; opacity: 0.5; font-size: 14px; }
+
+  .canvas-wrap { flex: 1; position: relative; min-height: 0; touch-action: none; }
+  #cube-canvas { width: 100%; height: 100%; display: block; }
+
+  .view-banner {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    background: rgba(92, 214, 107, 0.15); border: 1px solid var(--green);
+    border-radius: 20px; font-size: 9px; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--green); font-weight: 700; z-index: 3;
+  }
+  .view-banner .dot {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .bottom-bar {
+    position: relative; z-index: 5;
+    padding: 8px 16px calc(var(--safe-bottom) + 16px); flex-shrink: 0;
+    background: linear-gradient(to top, var(--bg) 60%, transparent);
+  }
+  .current-move-row { text-align: center; margin-bottom: 12px; }
+  .current-move-label {
+    font-size: 9px; letter-spacing: 0.25em; color: var(--text-dim);
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .current-move-value {
+    font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; line-height: 1;
+    color: var(--accent); text-shadow: 0 0 30px rgba(255, 210, 63, 0.3); height: 38px;
+  }
+  .current-move-value.idle { color: var(--text-dim); opacity: 0.4; font-size: 24px; }
+  .progress-bar {
+    height: 3px; background: var(--line); border-radius: 2px; overflow: hidden;
+    margin-top: 8px; max-width: 280px; margin-left: auto; margin-right: auto;
+  }
+  .progress-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hot));
+    transition: width 0.3s ease; border-radius: 2px;
+  }
+  .controls-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .ctrl-btn {
+    width: 48px; height: 48px; border-radius: 14px;
+    border: 1px solid var(--line); background: var(--bg-soft); color: var(--text);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease; font-size: 18px; font-family: inherit;
+  }
+  .ctrl-btn:active:not(:disabled) { transform: scale(0.92); }
+  .ctrl-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+  .ctrl-btn.play {
+    width: 64px; height: 64px; border-radius: 18px;
+    background: var(--accent); color: var(--bg); border-color: var(--accent);
+    font-size: 22px; box-shadow: 0 8px 24px rgba(255, 210, 63, 0.25);
+  }
+  .ctrl-btn.play:active { background: var(--accent-hot); }
+
+  .sheet-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+  }
+  .sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    background: var(--bg-soft);
+    border-top-left-radius: 24px; border-top-right-radius: 24px;
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0.3, 1);
+    max-height: 85vh; display: flex; flex-direction: column;
+    padding-bottom: var(--safe-bottom);
+  }
+  .sheet.open { transform: translateY(0); }
+  .sheet-handle-area {
+    padding: 8px 0 4px; display: flex; justify-content: center;
+    cursor: grab; touch-action: none;
+  }
+  .sheet-handle { width: 40px; height: 4px; background: var(--line); border-radius: 2px; }
+
+  .sheet-tabs {
+    display: flex; gap: 4px; padding: 4px 16px 0; border-bottom: 1px solid var(--line);
+  }
+  .sheet-tab {
+    flex: 1; padding: 12px 0; border: none; background: transparent;
+    color: var(--text-dim); font-family: inherit; font-size: 10px;
+    letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer;
+    font-weight: 700; border-bottom: 2px solid transparent;
+    transition: all 0.15s ease;
+  }
+  .sheet-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .sheet-content {
+    flex: 1; overflow-y: auto; padding: 20px 16px 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sheet-content::-webkit-scrollbar { width: 4px; }
+  .sheet-content::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+
+  .field { margin-bottom: 18px; }
+  .field-label {
+    font-size: 10px; letter-spacing: 0.2em; color: var(--text-dim);
+    text-transform: uppercase; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600;
+  }
+  .field-label .hint { text-transform: none; letter-spacing: 0.05em; opacity: 0.6; font-weight: 400; }
+  .input, .textarea {
+    width: 100%; background: var(--bg-card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px; color: var(--text);
+    font-family: 'JetBrains Mono', monospace; font-size: 14px;
+    transition: border-color 0.15s ease; resize: none; -webkit-appearance: none;
+  }
+  .input:focus, .textarea:focus { outline: none; border-color: var(--accent); }
+  .textarea { font-size: 15px; letter-spacing: 0.05em; min-height: 70px; }
+
+  .input-row { display: flex; gap: 10px; align-items: center; }
+  .input-row .input { flex: 1; }
+  .num-input { text-align: center; font-weight: 700; }
+  .unit { color: var(--text-dim); font-size: 11px; letter-spacing: 0.1em; flex-shrink: 0; }
+
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px; gap: 12px;
+  }
+  .toggle-label { font-size: 13px; font-weight: 600; }
+  .toggle-desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .toggle {
+    position: relative; width: 48px; height: 28px;
+    background: var(--line); border-radius: 14px; cursor: pointer;
+    transition: background 0.2s ease; flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 22px; height: 22px; background: var(--text); border-radius: 50%;
+    transition: transform 0.2s ease;
+  }
+  .toggle.on::after { transform: translateX(20px); background: var(--bg); }
+
+  .mode-switch {
+    display: flex; background: var(--bg-card); border-radius: 12px;
+    padding: 4px; border: 1px solid var(--line); margin-bottom: 18px;
+  }
+  .mode-switch button {
+    flex: 1; padding: 12px 0; border: none; background: transparent;
+    color: var(--text-dim); font-family: inherit; font-size: 11px;
+    letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer;
+    border-radius: 9px; transition: all 0.2s ease; font-weight: 700;
+  }
+  .mode-switch button.active { background: var(--accent); color: var(--bg); }
+
+  .section-title {
+    font-family: 'Fraunces', serif; font-weight: 800; font-size: 15px;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::before {
+    content: ''; width: 4px; height: 16px; background: var(--accent); border-radius: 2px;
+  }
+  .section-desc {
+    font-size: 11px; color: var(--text-dim); margin-bottom: 14px; line-height: 1.5;
+  }
+
+  .face-tabs {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 14px;
+  }
+  .face-tab-btn {
+    padding: 10px 0; background: var(--bg-card); border: 1px solid var(--line);
+    border-radius: 10px; font-family: inherit; font-weight: 700;
+    color: var(--text-dim); cursor: pointer; font-size: 13px;
+    transition: all 0.15s ease;
+  }
+  .face-tab-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  .face-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    background: var(--bg-card); padding: 12px; border-radius: 14px;
+    border: 1px solid var(--line); aspect-ratio: 1;
+    max-width: 240px; margin: 0 auto;
+  }
+  .face-cell {
+    aspect-ratio: 1; border-radius: 10px; cursor: pointer;
+    transition: all 0.15s ease; position: relative;
+  }
+  .face-cell:active { transform: scale(0.92); }
+  .face-cell.disabled { opacity: 0.45; }
+  .face-cell.disabled::after {
+    content: '✕'; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); color: var(--text);
+    font-size: 22px; font-weight: 700; opacity: 0.7;
+  }
+  .face-help {
+    font-size: 12px; color: var(--text-dim); margin-top: 12px;
+    text-align: center; line-height: 1.5;
+  }
+  .face-help b { color: var(--text); }
+
+  .btn {
+    padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg-card); color: var(--text); font-family: inherit;
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+    font-weight: 700; cursor: pointer; transition: all 0.15s ease;
+  }
+  .btn:active { transform: scale(0.96); border-color: var(--accent); color: var(--accent); }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .btn { flex: 1; }
+  .btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  .divider { height: 1px; background: var(--line); margin: 22px 0; }
+
+  .preset-list { display: flex; flex-direction: column; gap: 8px; }
+  .preset-item {
+    padding: 14px; background: var(--bg-card); border: 1px solid var(--line);
+    border-radius: 12px; cursor: pointer; transition: all 0.15s ease;
+  }
+  .preset-item:active { transform: scale(0.98); }
+  .preset-item.active { border-color: var(--accent); background: rgba(255, 210, 63, 0.08); }
+  .preset-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; font-family: 'Fraunces', serif; }
+  .preset-moves { font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em; word-break: break-all; }
+
+  @media (min-width: 900px) {
+    #app { display: grid; grid-template-columns: 1fr 400px; }
+    .stage { position: relative; inset: auto; border-right: 1px solid var(--line); }
+    .top-bar { padding: 24px 28px 12px; }
+    .formula-display { padding: 12px 28px; }
+    .formula-text { font-size: 22px; white-space: normal; }
+    .current-move-value { font-size: 56px; height: 56px; }
+    .bottom-bar { padding: 12px 28px 28px; background: transparent; }
+    .header-btn.menu-btn { display: none; }
+    .sheet {
+      position: relative; transform: none !important; max-height: none;
+      border-radius: 0; border-top: none; border-left: 1px solid var(--line);
+      box-shadow: none; padding-bottom: 0;
+    }
+    .sheet-backdrop { display: none; }
+    .sheet-handle-area { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="stage">
+    <div class="top-bar">
+      <button class="header-btn" @click="resetCube" title="Reset">↺</button>
+      <div class="preset-name-pill">
+        {{ currentPresetName || algorithmName || 'Custom' }}
+        <span class="move-count">{{ parsedMoves.length }} movimentos</span>
+      </div>
+      <button class="header-btn menu-btn" :class="{ active: sheetOpen }" @click="toggleSheet" title="Editor">≡</button>
+    </div>
+
+    <div class="formula-display">
+      <div class="formula-text">
+        <span v-if="!parsedMoves.length" class="empty">— sem movimentos —</span>
+        <span
+          v-for="(m, i) in parsedMoves"
+          :key="i"
+          class="move"
+          :class="{ done: i < currentMoveIndex, current: i === currentMoveIndex }"
+        >{{ m }}</span>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <div v-if="viewMode" class="view-banner">
+        <span class="dot"></span> view mode
+      </div>
+      <canvas id="cube-canvas" ref="canvas"></canvas>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="current-move-row">
+        <div class="current-move-label">movimento atual</div>
+        <div class="current-move-value" :class="{ idle: !currentMoveLabel }">
+          {{ currentMoveLabel || '—' }}
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <button class="ctrl-btn" @click="stepBack" :disabled="currentMoveIndex <= 0 || isAnimating">‹</button>
+        <button class="ctrl-btn play" @click="togglePlay">
+          {{ isPlaying ? '❚❚' : '▶' }}
+        </button>
+        <button class="ctrl-btn" @click="stepForward" :disabled="currentMoveIndex >= parsedMoves.length || isAnimating">›</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" :class="{ open: sheetOpen }" @click="closeSheet"></div>
+
+  <div class="sheet" :class="{ open: sheetOpen }">
+    <div class="sheet-handle-area" @click="closeSheet">
+      <div class="sheet-handle"></div>
+    </div>
+
+    <div class="sheet-tabs">
+      <button class="sheet-tab" :class="{ active: tab === 'algo' }" @click="tab = 'algo'">Algoritmo</button>
+      <button class="sheet-tab" :class="{ active: tab === 'face' }" @click="tab = 'face'">Stickers</button>
+      <button class="sheet-tab" :class="{ active: tab === 'presets' }" @click="tab = 'presets'">Presets</button>
+    </div>
+
+    <div class="sheet-content">
+      <div v-show="tab === 'algo'">
+        <div class="mode-switch">
+          <button :class="{ active: !viewMode }" @click="setMode(false)">Editor</button>
+          <button :class="{ active: viewMode }" @click="setMode(true)">View · Auto</button>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            algoritmo
+            <span class="hint">U R U' R' U2 ...</span>
+          </div>
+          <textarea class="textarea" v-model="algorithmInput" placeholder="Ex: U R U' R' U' F' U F" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+        </div>
+
+        <div class="field">
+          <div class="field-label">nome</div>
+          <input class="input" type="text" v-model="algorithmName" placeholder="Ex: Destino à direita">
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            velocidade
+            <span class="hint">{{ animationSpeed }}ms / movimento</span>
+          </div>
+          <input class="input" type="range" v-model.number="animationSpeed" min="150" max="1500" step="50">
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            pausa antes de reiniciar
+            <span class="hint">view mode</span>
+          </div>
+          <div class="input-row">
+            <input class="input num-input" type="number" v-model.number="restartDelay" min="0" max="30" step="0.5" inputmode="decimal">
+            <span class="unit">SEGUNDOS</span>
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Loop automático</div>
+            <div class="toggle-desc">Reinicia ao terminar (no view mode)</div>
+          </div>
+          <div class="toggle" :class="{ on: autoLoop }" @click="autoLoop = !autoLoop"></div>
+        </div>
+      </div>
+
+      <div v-show="tab === 'face'">
+        <div class="section-title">Stickers Desativados</div>
+        <p class="section-desc">
+          Toque nos stickers para marcar peças que <em>não importam</em> nesse algoritmo. Elas aparecerão em cinza no cubo 3D.
+        </p>
+
+        <div class="face-tabs">
+          <button v-for="f in faces" :key="f.code" class="face-tab-btn" :class="{ active: activeFace === f.code }" @click="activeFace = f.code">
+            {{ f.code }}
+          </button>
+        </div>
+
+        <div class="face-grid">
+          <div
+            v-for="i in 9"
+            :key="i"
+            class="face-cell"
+            :class="{ disabled: isDisabled(activeFace, i-1) }"
+            :style="{ background: getFaceColor(activeFace, i-1) }"
+            @click="toggleSticker(activeFace, i-1)"
+          ></div>
+        </div>
+        <div class="face-help">
+          Face <b>{{ faces.find(f => f.code === activeFace).name }}</b> · {{ disabledCountForFace(activeFace) }}/9 desativados
+        </div>
+
+        <div class="btn-row" style="margin-top: 16px;">
+          <button class="btn" @click="disableAllFace">Desativar tudo</button>
+          <button class="btn" @click="enableAllFace">Ativar tudo</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="btn-row">
+          <button class="btn" @click="disableAllCube">Cinza tudo</button>
+          <button class="btn" @click="enableAllCube">Cores tudo</button>
+        </div>
+      </div>
+
+      <div v-show="tab === 'presets'">
+        <div class="section-title">Presets</div>
+        <div class="preset-list">
+          <div
+            v-for="(p, i) in presets"
+            :key="i"
+            class="preset-item"
+            :class="{ active: currentPresetName === p.name }"
+            @click="loadPreset(p)"
+          >
+            <div class="preset-name">{{ p.name }}</div>
+            <div class="preset-moves">{{ p.algorithm }}</div>
+          </div>
+        </div>
+
+        <div class="btn-row" style="margin-top: 18px;">
+          <button class="btn primary" @click="saveCurrentAsPreset">+ Salvar atual</button>
+          <button class="btn" @click="exportConfig">Exportar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "vue": "https://cdn.jsdelivr.net/npm/vue@3.4.27/dist/vue.esm-browser.prod.js",
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import { createApp, ref, computed, onMounted, watch, nextTick } from 'vue';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+const COLORS = {
+  U: '#f8f8f4', D: '#ffe14a', F: '#5cd66b', B: '#4a8eff',
+  R: '#ff4d4d', L: '#ff9a3c', X: '#3a3a3f', K: '#0f0f12',
+};
+const FACES = [
+  { code: 'U', name: 'Up' }, { code: 'D', name: 'Down' },
+  { code: 'F', name: 'Front' }, { code: 'B', name: 'Back' },
+  { code: 'L', name: 'Left' }, { code: 'R', name: 'Right' },
+];
+
+const App = {
+  setup() {
+    const canvas = ref(null);
+
+    const algorithmInput = ref("U R U' R' U' F' U F");
+    const algorithmName = ref('Destino à direita');
+    const animationSpeed = ref(450);
+    const restartDelay = ref(2);
+    const autoLoop = ref(true);
+    const viewMode = ref(false);
+    const isPlaying = ref(false);
+    const isAnimating = ref(false);
+    const currentMoveIndex = ref(0);
+    const currentMoveLabel = ref('');
+    const activeFace = ref('U');
+    const sheetOpen = ref(false);
+    const tab = ref('algo');
+
+    const disabledStickers = ref({
+      U: new Set(), D: new Set(), F: new Set(), B: new Set(), L: new Set(), R: new Set()
+    });
+
+    const presets = ref([
+      {
+        name: 'Destino à direita',
+        algorithm: "U R U' R' U' F' U F",
+        disabled: { U: [0,1,2,3,5,6,7,8], D: 'all', F: 'all', B: 'all', L: 'all', R: 'all' }
+      },
+      {
+        name: 'Destino à esquerda',
+        algorithm: "U' L' U L U F U' F'",
+        disabled: { U: [0,1,2,3,5,6,7,8], D: 'all', F: 'all', B: 'all', L: 'all', R: 'all' }
+      },
+      {
+        name: 'Sune',
+        algorithm: "R U R' U R U2 R'",
+        disabled: { D: 'all', F: [3,4,5,6,7,8], B: [3,4,5,6,7,8], L: [3,4,5,6,7,8], R: [3,4,5,6,7,8] }
+      },
+      {
+        name: 'Anti-Sune',
+        algorithm: "R U2 R' U' R U' R'",
+        disabled: { D: 'all', F: [3,4,5,6,7,8], B: [3,4,5,6,7,8], L: [3,4,5,6,7,8], R: [3,4,5,6,7,8] }
+      },
+      {
+        name: 'T-Perm',
+        algorithm: "R U R' U' R' F R2 U' R' U' R U R' F'",
+        disabled: { D: 'all' }
+      },
+      {
+        name: 'Y-Perm',
+        algorithm: "F R U' R' U' R U R' F' R U R' U' R' F R F'",
+        disabled: { D: 'all' }
+      },
+      {
+        name: 'Sexy Move',
+        algorithm: "R U R' U'",
+        disabled: { D: 'all', F: [3,4,5,6,7,8], B: 'all', L: 'all' }
+      },
+      {
+        name: 'Cross + F2L básico',
+        algorithm: "F R U' R' F'",
+        disabled: { U: [0,1,2,3,5,6,7,8], D: 'all', B: 'all', L: 'all' }
+      },
+    ]);
+    const currentPresetName = ref('Destino à direita');
+
+    const parsedMoves = computed(() =>
+      algorithmInput.value.replace(/\s+/g, ' ').trim().split(' ')
+        .filter(m => m.length > 0).filter(m => /^[UDFBLR]['2]?$/.test(m))
+    );
+    const progressPercent = computed(() =>
+      parsedMoves.value.length ? (currentMoveIndex.value / parsedMoves.value.length) * 100 : 0
+    );
+
+    let scene, camera, renderer, controls;
+    let cubies = [];
+    let rotatingGroup = null;
+
+    function initThree() {
+      const c = canvas.value;
+      const width = c.clientWidth || 1;
+      const height = c.clientHeight || 1;
+
+      scene = new THREE.Scene();
+      scene.background = null;
+
+      camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
+      camera.position.set(5.5, 5.5, 7);
+      camera.lookAt(0, 0, 0);
+
+      renderer = new THREE.WebGLRenderer({ canvas: c, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(width, height, false);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+      dir.position.set(5, 8, 6);
+      scene.add(dir);
+      const dir2 = new THREE.DirectionalLight(0xffd23f, 0.15);
+      dir2.position.set(-4, -2, -3);
+      scene.add(dir2);
+
+      controls = new OrbitControls(camera, c);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.enablePan = false;
+      controls.minDistance = 5;
+      controls.maxDistance = 18;
+      controls.enableZoom = false;
+
+      buildCube();
+      animate();
+
+      const ro = new ResizeObserver(() => onResize());
+      ro.observe(c.parentElement);
+      window.addEventListener('resize', onResize);
+      window.addEventListener('orientationchange', () => setTimeout(onResize, 200));
+    }
+
+    function onResize() {
+      const c = canvas.value;
+      if (!c) return;
+      const width = c.clientWidth;
+      const height = c.clientHeight;
+      if (width === 0 || height === 0) return;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height, false);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Shared geometries and materials for the body (created once)
+    let sharedBodyGeom = null;
+    let sharedBodyMat = null;
+    let sharedStickerGeom = null;
+
+    function buildCube() {
+      // Remove old cubies
+      cubies.forEach(c => {
+        scene.remove(c.group);
+        // Dispose sticker materials (they were created per-sticker)
+        Object.values(c.stickers).forEach(s => s.material.dispose());
+      });
+      cubies = [];
+
+      const cubieSize = 0.95;
+      const cubieRadius = 0.08;
+      const stickerSize = 0.82;
+      const stickerRadius = 0.10;
+      const stickerOffset = cubieSize / 2 + 0.001;
+
+      if (!sharedBodyGeom) {
+        sharedBodyGeom = new RoundedBoxGeometry(cubieSize, cubieSize, cubieSize, 3, cubieRadius);
+        sharedBodyMat = new THREE.MeshStandardMaterial({
+          color: COLORS.K, roughness: 0.6, metalness: 0.0,
+        });
+        sharedStickerGeom = new RoundedBoxGeometry(stickerSize, stickerSize, 0.02, 3, stickerRadius);
+      }
+
+      for (let x = -1; x <= 1; x++) {
+        for (let y = -1; y <= 1; y++) {
+          for (let z = -1; z <= 1; z++) {
+            const group = new THREE.Group();
+            group.position.set(x, y, z);
+
+            // Black plastic body
+            const body = new THREE.Mesh(sharedBodyGeom, sharedBodyMat);
+            group.add(body);
+
+            // Stickers on outward faces
+            const stickers = {};
+            const faceConfigs = [
+              { face: 'R', cond: x === 1,  pos: [ stickerOffset, 0, 0], rot: [0,  Math.PI / 2, 0] },
+              { face: 'L', cond: x === -1, pos: [-stickerOffset, 0, 0], rot: [0, -Math.PI / 2, 0] },
+              { face: 'U', cond: y === 1,  pos: [0,  stickerOffset, 0], rot: [-Math.PI / 2, 0, 0] },
+              { face: 'D', cond: y === -1, pos: [0, -stickerOffset, 0], rot: [ Math.PI / 2, 0, 0] },
+              { face: 'F', cond: z === 1,  pos: [0, 0,  stickerOffset], rot: [0, 0, 0] },
+              { face: 'B', cond: z === -1, pos: [0, 0, -stickerOffset], rot: [0, Math.PI, 0] },
+            ];
+
+            faceConfigs.forEach(fc => {
+              if (!fc.cond) return;
+              const stickerMat = new THREE.MeshStandardMaterial({
+                color: COLORS[fc.face],
+                roughness: 0.45, metalness: 0.0,
+              });
+              const sticker = new THREE.Mesh(sharedStickerGeom, stickerMat);
+              sticker.position.set(...fc.pos);
+              sticker.rotation.set(...fc.rot);
+              group.add(sticker);
+              stickers[fc.face] = sticker;
+            });
+
+            scene.add(group);
+            cubies.push({
+              group,
+              stickers,
+              logical: { x, y, z },
+              home: { x, y, z },
+            });
+          }
+        }
+      }
+      applyDisabledMask();
+    }
+
+    /**
+     * Paints stickers based on each cubie's HOME position (never changes).
+     * Each sticker is its own mesh attached to the cubie group, so when the
+     * cubie rotates, the stickers rotate with it automatically. We only need
+     * to set the color of each sticker once based on what face/index it
+     * represents in the original solved state.
+     */
+    function applyDisabledMask() {
+      cubies.forEach(c => {
+        const { x, y, z } = c.home;
+        Object.entries(c.stickers).forEach(([face, mesh]) => {
+          const idx = stickerIndexFor(face, x, y, z);
+          const isDis = disabledStickers.value[face].has(idx);
+          mesh.material.color.set(isDis ? COLORS.X : COLORS[face]);
+        });
+      });
+    }
+
+    function stickerIndexFor(face, x, y, z) {
+      let row, col;
+      switch (face) {
+        case 'U':
+          row = z === -1 ? 0 : (z === 0 ? 1 : 2);
+          col = x === -1 ? 0 : (x === 0 ? 1 : 2);
+          break;
+        case 'D':
+          row = z === 1 ? 0 : (z === 0 ? 1 : 2);
+          col = x === -1 ? 0 : (x === 0 ? 1 : 2);
+          break;
+        case 'F':
+          row = y === 1 ? 0 : (y === 0 ? 1 : 2);
+          col = x === -1 ? 0 : (x === 0 ? 1 : 2);
+          break;
+        case 'B':
+          row = y === 1 ? 0 : (y === 0 ? 1 : 2);
+          col = x === 1 ? 0 : (x === 0 ? 1 : 2);
+          break;
+        case 'L':
+          row = y === 1 ? 0 : (y === 0 ? 1 : 2);
+          col = z === -1 ? 0 : (z === 0 ? 1 : 2);
+          break;
+        case 'R':
+          row = y === 1 ? 0 : (y === 0 ? 1 : 2);
+          col = z === 1 ? 0 : (z === 0 ? 1 : 2);
+          break;
+      }
+      return row * 3 + col;
+    }
+
+    const MOVE_DEFS = {
+      U: { axis: 'y', layer:  1, angle: -Math.PI / 2 },
+      D: { axis: 'y', layer: -1, angle:  Math.PI / 2 },
+      R: { axis: 'x', layer:  1, angle: -Math.PI / 2 },
+      L: { axis: 'x', layer: -1, angle:  Math.PI / 2 },
+      F: { axis: 'z', layer:  1, angle: -Math.PI / 2 },
+      B: { axis: 'z', layer: -1, angle:  Math.PI / 2 },
+    };
+    function parseMoveToken(token) {
+      const def = MOVE_DEFS[token[0].toUpperCase()];
+      if (!def) return null;
+      let angle = def.angle;
+      if (token.includes("'")) angle = -angle;
+      if (token.includes("2")) angle *= 2;
+      return { axis: def.axis, layer: def.layer, angle, label: token };
+    }
+    function getCubiesForLayer(axis, layer) {
+      return cubies.filter(c => Math.round(c.logical[axis]) === layer);
+    }
+
+    function performMove(token, durationMs) {
+      return new Promise(resolve => {
+        const move = parseMoveToken(token);
+        if (!move) { resolve(); return; }
+        const layerCubies = getCubiesForLayer(move.axis, move.layer);
+        rotatingGroup = new THREE.Group();
+        scene.add(rotatingGroup);
+        // Attach the cubie GROUPS (not meshes) — preserves world transforms
+        layerCubies.forEach(c => rotatingGroup.attach(c.group));
+
+        const start = performance.now();
+        const target = move.angle;
+        const axisVec = new THREE.Vector3(
+          move.axis === 'x' ? 1 : 0,
+          move.axis === 'y' ? 1 : 0,
+          move.axis === 'z' ? 1 : 0,
+        );
+        const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+        function step(now) {
+          const t = Math.min(1, (now - start) / durationMs);
+          rotatingGroup.setRotationFromAxisAngle(axisVec, target * easeInOut(t));
+          if (t < 1) requestAnimationFrame(step);
+          else {
+            rotatingGroup.setRotationFromAxisAngle(axisVec, target);
+            layerCubies.forEach(c => {
+              // Re-parent to scene, preserving world transform
+              scene.attach(c.group);
+              // Snap position
+              c.group.position.x = Math.round(c.group.position.x);
+              c.group.position.y = Math.round(c.group.position.y);
+              c.group.position.z = Math.round(c.group.position.z);
+              c.logical.x = c.group.position.x;
+              c.logical.y = c.group.position.y;
+              c.logical.z = c.group.position.z;
+              snapRotation(c.group);
+            });
+            scene.remove(rotatingGroup);
+            rotatingGroup = null;
+            // No need to call applyDisabledMask — colors stay glued to stickers
+            resolve();
+          }
+        }
+        requestAnimationFrame(step);
+      });
+    }
+
+    function snapRotation(obj3d) {
+      const e = new THREE.Euler().setFromQuaternion(obj3d.quaternion, 'XYZ');
+      const snap = a => Math.round(a / (Math.PI / 2)) * (Math.PI / 2);
+      e.x = snap(e.x); e.y = snap(e.y); e.z = snap(e.z);
+      obj3d.quaternion.setFromEuler(e);
+    }
+
+    let playbackToken = 0;
+    async function play() {
+      if (isPlaying.value) return;
+      isPlaying.value = true;
+      const myToken = ++playbackToken;
+      while (isPlaying.value && myToken === playbackToken) {
+        if (currentMoveIndex.value >= parsedMoves.value.length) {
+          if (viewMode.value && autoLoop.value) {
+            currentMoveLabel.value = '';
+            await sleep(restartDelay.value * 1000);
+            if (myToken !== playbackToken) return;
+            currentMoveIndex.value = 0;
+            buildCube();
+            await sleep(50);
+            continue;
+          } else { isPlaying.value = false; break; }
+        }
+        const move = parsedMoves.value[currentMoveIndex.value];
+        currentMoveLabel.value = move;
+        isAnimating.value = true;
+        await performMove(move, animationSpeed.value);
+        isAnimating.value = false;
+        if (myToken !== playbackToken) return;
+        currentMoveIndex.value++;
+      }
+    }
+    function pause() { isPlaying.value = false; playbackToken++; }
+    function togglePlay() { isPlaying.value ? pause() : play(); }
+
+    async function stepForward() {
+      if (currentMoveIndex.value >= parsedMoves.value.length || isAnimating.value) return;
+      const move = parsedMoves.value[currentMoveIndex.value];
+      currentMoveLabel.value = move;
+      isAnimating.value = true;
+      await performMove(move, animationSpeed.value);
+      isAnimating.value = false;
+      currentMoveIndex.value++;
+    }
+    async function stepBack() {
+      if (currentMoveIndex.value <= 0 || isAnimating.value) return;
+      currentMoveIndex.value--;
+      const inv = invertMove(parsedMoves.value[currentMoveIndex.value]);
+      currentMoveLabel.value = inv + ' (undo)';
+      isAnimating.value = true;
+      await performMove(inv, animationSpeed.value);
+      isAnimating.value = false;
+      currentMoveLabel.value = '';
+    }
+    function invertMove(t) {
+      if (t.endsWith("'")) return t.slice(0, -1);
+      if (t.endsWith("2")) return t;
+      return t + "'";
+    }
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    function resetCube() {
+      pause();
+      currentMoveIndex.value = 0;
+      currentMoveLabel.value = '';
+      buildCube();
+    }
+
+    function isDisabled(face, idx) { return disabledStickers.value[face].has(idx); }
+    function toggleSticker(face, idx) {
+      const set = new Set(disabledStickers.value[face]);
+      if (set.has(idx)) set.delete(idx); else set.add(idx);
+      disabledStickers.value[face] = set;
+      applyDisabledMask();
+    }
+    function disabledCountForFace(face) { return disabledStickers.value[face].size; }
+    function getFaceColor(face, idx) { return isDisabled(face, idx) ? COLORS.X : COLORS[face]; }
+    function disableAllFace() {
+      const set = new Set();
+      for (let i = 0; i < 9; i++) set.add(i);
+      disabledStickers.value[activeFace.value] = set;
+      applyDisabledMask();
+    }
+    function enableAllFace() {
+      disabledStickers.value[activeFace.value] = new Set();
+      applyDisabledMask();
+    }
+    function disableAllCube() {
+      const fresh = {};
+      ['U','D','F','B','L','R'].forEach(f => {
+        const s = new Set();
+        for (let i = 0; i < 9; i++) s.add(i);
+        fresh[f] = s;
+      });
+      disabledStickers.value = fresh;
+      applyDisabledMask();
+    }
+    function enableAllCube() {
+      disabledStickers.value = { U: new Set(), D: new Set(), F: new Set(), B: new Set(), L: new Set(), R: new Set() };
+      applyDisabledMask();
+    }
+
+    function loadPreset(p) {
+      pause();
+      algorithmInput.value = p.algorithm;
+      algorithmName.value = p.name;
+      currentPresetName.value = p.name;
+      const fresh = { U: new Set(), D: new Set(), F: new Set(), B: new Set(), L: new Set(), R: new Set() };
+      if (p.disabled) {
+        Object.keys(p.disabled).forEach(face => {
+          const v = p.disabled[face];
+          if (v === 'all') { for (let i = 0; i < 9; i++) fresh[face].add(i); }
+          else if (Array.isArray(v)) { v.forEach(i => fresh[face].add(i)); }
+        });
+      }
+      disabledStickers.value = fresh;
+      currentMoveIndex.value = 0;
+      currentMoveLabel.value = '';
+      buildCube();
+      closeSheet();
+    }
+    function saveCurrentAsPreset() {
+      const name = algorithmName.value || 'Sem nome';
+      const disabled = {};
+      Object.keys(disabledStickers.value).forEach(f => {
+        disabled[f] = Array.from(disabledStickers.value[f]);
+      });
+      const newP = { name, algorithm: algorithmInput.value, disabled };
+      const idx = presets.value.findIndex(p => p.name === name);
+      if (idx >= 0) presets.value[idx] = newP;
+      else presets.value.push(newP);
+      currentPresetName.value = name;
+    }
+    function exportConfig() {
+      const cfg = {
+        name: algorithmName.value, algorithm: algorithmInput.value,
+        animationSpeed: animationSpeed.value, restartDelay: restartDelay.value,
+        autoLoop: autoLoop.value,
+        disabled: Object.fromEntries(
+          Object.entries(disabledStickers.value).map(([k, v]) => [k, Array.from(v)])
+        )
+      };
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (algorithmName.value || 'cubo-config') + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function setMode(viewing) {
+      viewMode.value = viewing;
+      pause();
+      currentMoveIndex.value = 0;
+      currentMoveLabel.value = '';
+      buildCube();
+      if (viewing) {
+        closeSheet();
+        nextTick(() => play());
+      }
+    }
+    function toggleSheet() { sheetOpen.value = !sheetOpen.value; }
+    function closeSheet() { sheetOpen.value = false; }
+
+    watch(algorithmInput, () => {
+      pause();
+      currentMoveIndex.value = 0;
+      currentMoveLabel.value = '';
+      currentPresetName.value = '';
+      buildCube();
+    });
+
+    onMounted(() => {
+      initThree();
+      loadPreset(presets.value[0]);
+      setTimeout(onResize, 100);
+      setTimeout(onResize, 500);
+    });
+
+    return {
+      canvas,
+      algorithmInput, algorithmName, animationSpeed, restartDelay, autoLoop,
+      viewMode, isPlaying, isAnimating,
+      currentMoveIndex, currentMoveLabel, parsedMoves, progressPercent,
+      faces: FACES, activeFace,
+      presets, currentPresetName,
+      sheetOpen, tab,
+      togglePlay, stepForward, stepBack, resetCube,
+      isDisabled, toggleSticker, disabledCountForFace, getFaceColor,
+      disableAllFace, enableAllFace, disableAllCube, enableAllCube,
+      loadPreset, saveCurrentAsPreset, exportConfig,
+      setMode, toggleSheet, closeSheet,
+    };
+  }
+};
+
+createApp(App).mount('#app');
+</script>
+</body>
+</html>

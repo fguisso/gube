@@ -4,7 +4,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 export const COLORS = {
   U: '#ffe14a', D: '#f8f8f4', F: '#5cd66b', B: '#4a8eff',
-  R: '#ff4d4d', L: '#ff9a3c', X: '#3a3a3f', K: '#0f0f12',
+  R: '#ff9a3c', L: '#ff4d4d', X: '#3a3a3f', K: '#0f0f12',
 }
 
 export const FACES = [

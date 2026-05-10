@@ -15,6 +15,7 @@ export const FACES = [
 
 export const SUPPORTED_SIZES = [2, 3]
 export const DEFAULT_SIZE = 3
+export const DEFAULT_ORIENTATION = { az: 38, pol: 58 }
 
 const MOVE_RE = /[UDFBLR](?:'|2)?/g
 
@@ -87,8 +88,12 @@ export class CubeRenderer {
     this._sharedBodyGeom = null
     this._sharedBodyMat = null
     this._sharedStickerGeom = null
+    this.onOrientationChange = null
     this._onWindowResize = () => this.resize()
     this._onOrientation = () => setTimeout(() => this.resize(), 200)
+    this._onControlsChange = () => {
+      if (this.onOrientationChange) this.onOrientationChange(this.getOrientation())
+    }
   }
 
   init() {
@@ -120,6 +125,7 @@ export class CubeRenderer {
     this.controls.enablePan = false
     this.controls.enableZoom = false
     this._applyControlsForSize()
+    this.controls.addEventListener('change', this._onControlsChange)
 
     this.buildCube()
     this._animate()
@@ -152,6 +158,26 @@ export class CubeRenderer {
     const s = this.size / 3
     this.controls.minDistance = 5 * s
     this.controls.maxDistance = 18 * s
+  }
+
+  getOrientation() {
+    if (!this.controls) return { ...DEFAULT_ORIENTATION }
+    const rad = 180 / Math.PI
+    return {
+      az: Math.round(this.controls.getAzimuthalAngle() * rad),
+      pol: Math.round(this.controls.getPolarAngle() * rad),
+    }
+  }
+
+  setOrientation({ az, pol }) {
+    if (!this.camera || !this.controls) return
+    const r = this.camera.position.length()
+    const polarRad = Math.max(0.01, Math.min(Math.PI - 0.01, pol * Math.PI / 180))
+    const azRad = az * Math.PI / 180
+    const sph = new THREE.Spherical(r, polarRad, azRad)
+    this.camera.position.setFromSpherical(sph)
+    this.camera.lookAt(0, 0, 0)
+    this.controls.update()
   }
 
   resize() {
@@ -314,6 +340,7 @@ export class CubeRenderer {
     if (this._ro) this._ro.disconnect()
     window.removeEventListener('resize', this._onWindowResize)
     window.removeEventListener('orientationchange', this._onOrientation)
+    this.controls?.removeEventListener('change', this._onControlsChange)
     this.controls?.dispose()
     this.renderer?.dispose()
   }

@@ -15,6 +15,7 @@ const state = reactive({
   speed: 450,
   size: DEFAULT_SIZE,
   mask: {},
+  orientation: null,
 })
 
 const isPlaying = ref(false)
@@ -24,6 +25,7 @@ const currentMoveIndex = ref(0)
 useUrlSync(state, { writeBack: false })
 
 const parsedMoves = computed(() => parseAlgorithm(state.alg))
+const showPlayer = computed(() => parsedMoves.value.length > 0)
 const finished = computed(() =>
   parsedMoves.value.length > 0 && currentMoveIndex.value >= parsedMoves.value.length
 )
@@ -57,6 +59,7 @@ onMounted(() => {
   renderer = new CubeRenderer(canvas.value, state.size)
   renderer.disabledStickers = state.mask
   renderer.init()
+  if (state.orientation && !state.alg) renderer.setOrientation(state.orientation)
   setTimeout(() => renderer?.resize(), 100)
   setTimeout(() => renderer?.resize(), 500)
   nextTick(() => play())
@@ -123,7 +126,7 @@ async function stepBack() {
 
 <template>
   <div class="embed-stage">
-    <div v-if="parsedMoves.length" class="embed-formula">
+    <div v-if="showPlayer" class="embed-formula">
       <div class="formula-text">
         <span
           v-for="(m, i) in parsedMoves"
@@ -138,7 +141,7 @@ async function stepBack() {
       <canvas class="cube-canvas" ref="canvas"></canvas>
     </div>
 
-    <div class="embed-bottom">
+    <div v-if="showPlayer" class="embed-bottom">
       <div class="embed-controls">
         <button class="ctrl-btn" @click="stepBack" :disabled="currentMoveIndex <= 0 || isAnimating">‹</button>
         <button class="ctrl-btn play" @click="togglePlay" :title="isPlaying ? 'Pause' : finished ? 'Replay' : 'Play'">

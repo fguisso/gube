@@ -19,6 +19,7 @@ const state = reactive({
   speed: 450,
   size: DEFAULT_SIZE,
   mask: { U: [], D: [0,1,2,3,4,5,6,7,8], F: [3,4,5,6,7,8], B: [3,4,5,6,7,8], L: [3,4,5,6,7,8], R: [3,4,5,6,7,8] },
+  orientation: null,
 })
 
 const stickerCount = computed(() => state.size * state.size)
@@ -37,6 +38,7 @@ const shareCopied = ref(false)
 const snippetCopied = ref(false)
 
 const parsedMoves = computed(() => parseAlgorithm(state.alg))
+const showPlayer = computed(() => parsedMoves.value.length > 0)
 const finished = computed(() =>
   parsedMoves.value.length > 0 && currentMoveIndex.value >= parsedMoves.value.length
 )
@@ -47,11 +49,12 @@ const embedSnippet = computed(() => sharePayload.value ? buildEmbedSnippet(share
 
 useUrlSync(state)
 
-watch(() => state.alg, () => {
+watch(() => state.alg, (next, prev) => {
   pause()
   currentMoveIndex.value = 0
   currentPresetName.value = ''
   if (renderer) renderer.buildCube()
+  if (next && !prev) state.orientation = null
 })
 
 watch(() => state.size, n => {
@@ -79,6 +82,10 @@ onMounted(() => {
   renderer = new CubeRenderer(canvas.value, state.size)
   renderer.disabledStickers = state.mask
   renderer.init()
+  if (state.orientation && !state.alg) renderer.setOrientation(state.orientation)
+  renderer.onOrientationChange = (o) => {
+    if (!state.alg) state.orientation = o
+  }
   setTimeout(() => renderer?.resize(), 100)
   setTimeout(() => renderer?.resize(), 500)
 })
@@ -219,9 +226,8 @@ const activeFaceName = computed(() => FACES.find(f => f.code === activeFace.valu
         <button class="header-btn menu-btn" :class="{ active: sheetOpen }" @click="toggleSheet" title="Editor">≡</button>
       </div>
 
-      <div class="formula-display">
+      <div v-if="showPlayer" class="formula-display">
         <div class="formula-text">
-          <span v-if="!parsedMoves.length" class="empty">— no moves —</span>
           <span
             v-for="(m, i) in parsedMoves"
             :key="i"
@@ -235,7 +241,7 @@ const activeFaceName = computed(() => FACES.find(f => f.code === activeFace.valu
         <canvas id="cube-canvas" ref="canvas"></canvas>
       </div>
 
-      <div class="bottom-bar">
+      <div v-if="showPlayer" class="bottom-bar">
         <div class="controls-row">
           <button class="ctrl-btn" @click="stepBack" :disabled="currentMoveIndex <= 0 || isAnimating">‹</button>
           <button class="ctrl-btn play" @click="togglePlay" :title="isPlaying ? 'Pause' : finished ? 'Replay' : 'Play'">

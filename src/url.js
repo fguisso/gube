@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted, watch } from 'vue'
 import { PRESETS, expandDisabled } from './presets.js'
-import { DEFAULT_SIZE, SUPPORTED_SIZES } from './cube.js'
+import { DEFAULT_SIZE, DEFAULT_ORIENTATION, SUPPORTED_SIZES } from './cube.js'
 
 const EMPTY_MASK = () => ({ U: [], D: [], F: [], B: [], L: [], R: [] })
 const FACES_ORDER = ['U', 'D', 'F', 'B', 'L', 'R']
@@ -19,6 +19,25 @@ export const DEFAULTS = {
   speed: 450,
   size: DEFAULT_SIZE,
   mask: EMPTY_MASK(),
+  orientation: null,
+}
+
+function encodeOrientation(o) {
+  if (!o) return ''
+  return `${Math.round(o.az)}.${Math.round(o.pol)}`
+}
+
+function decodeOrientation(s) {
+  if (!s) return null
+  const [a, p] = s.split('.').map(Number)
+  if (!Number.isFinite(a) || !Number.isFinite(p)) return null
+  if (p < 0 || p > 180) return null
+  return { az: a, pol: p }
+}
+
+function orientationEqualsDefault(o) {
+  if (!o) return true
+  return o.az === DEFAULT_ORIENTATION.az && o.pol === DEFAULT_ORIENTATION.pol
 }
 
 function encodeAlg(alg) {
@@ -91,6 +110,10 @@ export function encode(state) {
   if (state.speed !== DEFAULTS.speed) params.set('s', String(state.speed))
   if (encodedMask && encodedMask !== presetMask) params.set('m', encodedMask)
 
+  if (!state.alg && state.orientation && !orientationEqualsDefault(state.orientation)) {
+    params.set('o', encodeOrientation(state.orientation))
+  }
+
   return params.toString()
 }
 
@@ -110,6 +133,10 @@ export function decode(payload) {
   out.mask = params.has('m')
     ? decodeMask(params.get('m'), out.size)
     : (preset ? expandDisabled(preset.disabled, out.size) : EMPTY_MASK())
+
+  if (!out.alg && params.has('o')) {
+    out.orientation = decodeOrientation(params.get('o'))
+  }
 
   return out
 }

@@ -141,8 +141,8 @@ async function stepBack() {
       <canvas class="cube-canvas" ref="canvas"></canvas>
     </div>
 
-    <div v-if="showPlayer" class="embed-bottom">
-      <div class="embed-controls">
+    <div class="embed-bottom">
+      <div v-if="showPlayer" class="embed-controls">
         <button class="ctrl-btn" @click="stepBack" :disabled="currentMoveIndex <= 0 || isAnimating">‹</button>
         <button class="ctrl-btn play" @click="togglePlay" :title="isPlaying ? 'Pause' : finished ? 'Replay' : 'Play'">
           <span v-if="isPlaying">❚❚</span>

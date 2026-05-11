@@ -300,36 +300,43 @@ export class CubeRenderer {
       this.scene.add(this.rotatingGroup)
       layerCubies.forEach(c => this.rotatingGroup.attach(c.group))
 
-      const start = performance.now()
       const target = move.angle
       const axisVec = new THREE.Vector3(
         move.axis === 'x' ? 1 : 0,
         move.axis === 'y' ? 1 : 0,
         move.axis === 'z' ? 1 : 0,
       )
-      const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
       const offset = (this.size - 1) / 2
 
+      const finalize = () => {
+        this.rotatingGroup.setRotationFromAxisAngle(axisVec, target)
+        layerCubies.forEach(c => {
+          this.scene.attach(c.group)
+          c.logical.x = Math.round(c.group.position.x + offset)
+          c.logical.y = Math.round(c.group.position.y + offset)
+          c.logical.z = Math.round(c.group.position.z + offset)
+          c.group.position.x = c.logical.x - offset
+          c.group.position.y = c.logical.y - offset
+          c.group.position.z = c.logical.z - offset
+          snapRotation(c.group)
+        })
+        this.scene.remove(this.rotatingGroup)
+        this.rotatingGroup = null
+        resolve()
+      }
+
+      if (!durationMs || durationMs <= 0) {
+        finalize()
+        return
+      }
+
+      const start = performance.now()
+      const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
       const step = now => {
         const t = Math.min(1, (now - start) / durationMs)
         this.rotatingGroup.setRotationFromAxisAngle(axisVec, target * easeInOut(t))
         if (t < 1) requestAnimationFrame(step)
-        else {
-          this.rotatingGroup.setRotationFromAxisAngle(axisVec, target)
-          layerCubies.forEach(c => {
-            this.scene.attach(c.group)
-            c.logical.x = Math.round(c.group.position.x + offset)
-            c.logical.y = Math.round(c.group.position.y + offset)
-            c.logical.z = Math.round(c.group.position.z + offset)
-            c.group.position.x = c.logical.x - offset
-            c.group.position.y = c.logical.y - offset
-            c.group.position.z = c.logical.z - offset
-            snapRotation(c.group)
-          })
-          this.scene.remove(this.rotatingGroup)
-          this.rotatingGroup = null
-          resolve()
-        }
+        else finalize()
       }
       requestAnimationFrame(step)
     })

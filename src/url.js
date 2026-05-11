@@ -16,6 +16,7 @@ function findPreset(alg, size) {
 
 export const DEFAULTS = {
   alg: '',
+  setup: '',
   speed: 450,
   size: DEFAULT_SIZE,
   mask: EMPTY_MASK(),
@@ -101,6 +102,7 @@ export function encode(state) {
   const size = state.size || DEFAULT_SIZE
 
   if (size !== DEFAULTS.size) params.set('n', String(size))
+  if (state.setup) params.set('p', encodeAlg(state.setup))
   if (state.alg && state.alg !== DEFAULTS.alg) params.set('a', encodeAlg(state.alg))
 
   const preset = findPreset(state.alg, size)
@@ -110,7 +112,7 @@ export function encode(state) {
   if (state.speed !== DEFAULTS.speed) params.set('s', String(state.speed))
   if (encodedMask && encodedMask !== presetMask) params.set('m', encodedMask)
 
-  if (!state.alg && state.orientation && !orientationEqualsDefault(state.orientation)) {
+  if (state.orientation && !orientationEqualsDefault(state.orientation)) {
     params.set('o', encodeOrientation(state.orientation))
   }
 
@@ -127,6 +129,7 @@ export function decode(payload) {
     if (SUPPORTED_SIZES.includes(n)) out.size = n
   }
   if (params.has('a')) out.alg = decodeAlg(params.get('a'))
+  if (params.has('p')) out.setup = decodeAlg(params.get('p'))
   if (params.has('s')) out.speed = Number(params.get('s'))
 
   const preset = findPreset(out.alg, out.size)
@@ -134,7 +137,7 @@ export function decode(payload) {
     ? decodeMask(params.get('m'), out.size)
     : (preset ? expandDisabled(preset.disabled, out.size) : EMPTY_MASK())
 
-  if (!out.alg && params.has('o')) {
+  if (params.has('o')) {
     out.orientation = decodeOrientation(params.get('o'))
   }
 

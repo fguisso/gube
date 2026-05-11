@@ -16,11 +16,14 @@ let playbackToken = 0
 
 const state = reactive({
   alg: "R U R' U R U2 R'",
+  setup: '',
   speed: 450,
   size: DEFAULT_SIZE,
   mask: { U: [], D: [0,1,2,3,4,5,6,7,8], F: [3,4,5,6,7,8], B: [3,4,5,6,7,8], L: [3,4,5,6,7,8], R: [3,4,5,6,7,8] },
   orientation: null,
 })
+
+const lockOrientation = ref(false)
 
 const stickerCount = computed(() => state.size * state.size)
 const allStickers = computed(() => Array.from({ length: stickerCount.value }, (_, i) => i))
@@ -49,12 +52,17 @@ const embedSnippet = computed(() => sharePayload.value ? buildEmbedSnippet(share
 
 useUrlSync(state)
 
-watch(() => state.alg, (next, prev) => {
+watch(() => state.alg, () => {
   pause()
   currentMoveIndex.value = 0
   currentPresetName.value = ''
-  if (renderer) renderer.buildCube()
-  if (next && !prev) state.orientation = null
+  rebuildWithSetup()
+})
+
+watch(() => state.setup, () => {
+  pause()
+  currentMoveIndex.value = 0
+  rebuildWithSetup()
 })
 
 watch(() => state.size, n => {
@@ -68,7 +76,10 @@ watch(() => state.size, n => {
     F: clamp(state.mask.F), B: clamp(state.mask.B),
     L: clamp(state.mask.L), R: clamp(state.mask.R),
   }
-  if (renderer) renderer.setSize(n)
+  if (renderer) {
+    renderer.setSize(n)
+    rebuildWithSetup()
+  }
 })
 
 watch(() => state.mask, m => {
@@ -82,9 +93,13 @@ onMounted(() => {
   renderer = new CubeRenderer(canvas.value, state.size)
   renderer.disabledStickers = state.mask
   renderer.init()
-  if (state.orientation && !state.alg) renderer.setOrientation(state.orientation)
+  if (state.orientation) {
+    lockOrientation.value = true
+    renderer.setOrientation(state.orientation)
+  }
+  if (state.setup) rebuildWithSetup()
   renderer.onOrientationChange = (o) => {
-    if (!state.alg) state.orientation = o
+    if (lockOrientation.value) state.orientation = o
   }
   setTimeout(() => renderer?.resize(), 100)
   setTimeout(() => renderer?.resize(), 500)
@@ -106,7 +121,7 @@ async function play() {
   ) {
     const move = parsedMoves.value[currentMoveIndex.value]
     isAnimating.value = true
-    await renderer.performMove(move, state.speed)
+    await renderer.performMove(remapMove(move, currentRotationSnap()), state.speed)
     isAnimating.value = false
     if (myToken !== playbackToken) return
     currentMoveIndex.value++
@@ -117,7 +132,7 @@ function pause() { isPlaying.value = false; playbackToken++ }
 function replay() {
   pause()
   currentMoveIndex.value = 0
-  renderer?.buildCube()
+  rebuildWithSetup()
   nextTick(() => play())
 }
 function togglePlay() {
@@ -130,7 +145,7 @@ async function stepForward() {
   if (!renderer || currentMoveIndex.value >= parsedMoves.value.length || isAnimating.value) return
   const move = parsedMoves.value[currentMoveIndex.value]
   isAnimating.value = true
-  await renderer.performMove(move, state.speed)
+  await renderer.performMove(remapMove(move, currentRotationSnap()), state.speed)
   isAnimating.value = false
   currentMoveIndex.value++
 }
@@ -139,14 +154,14 @@ async function stepBack() {
   currentMoveIndex.value--
   const inv = invertMove(parsedMoves.value[currentMoveIndex.value])
   isAnimating.value = true
-  await renderer.performMove(inv, state.speed)
+  await renderer.performMove(remapMove(inv, currentRotationSnap()), state.speed)
   isAnimating.value = false
 }
 
 function resetCube() {
   pause()
   currentMoveIndex.value = 0
-  renderer?.buildCube()
+  rebuildWithSetup()
 }
 
 function isDisabled(face, idx) {
@@ -183,7 +198,7 @@ function loadPreset(p) {
   currentPresetName.value = p.name
   state.mask = expandDisabled(p.disabled, presetSize)
   currentMoveIndex.value = 0
-  renderer?.buildCube()
+  rebuildWithSetup()
   closeSheet()
 }
 
@@ -204,6 +219,41 @@ async function copySnippet() {
 }
 
 const activeFaceName = computed(() => FACES.find(f => f.code === activeFace.value)?.name || '')
+
+function setLockOrientation(on) {
+  if (on === lockOrientation.value) return
+  lockOrientation.value = on
+  if (on) {
+    state.orientation = renderer?.getOrientation() || null
+  } else {
+    state.orientation = null
+  }
+}
+
+const FACES_CW = ['F', 'R', 'B', 'L']
+
+function currentRotationSnap() {
+  if (!lockOrientation.value || !state.orientation) return 0
+  return ((Math.round(state.orientation.az / 90) % 4) + 4) % 4
+}
+
+function remapMove(token, snap) {
+  if (!snap) return token
+  const head = token[0].toUpperCase()
+  const idx = FACES_CW.indexOf(head)
+  if (idx < 0) return token
+  return FACES_CW[(idx + snap) % 4] + token.slice(1)
+}
+
+function rebuildWithSetup() {
+  if (!renderer) return
+  renderer.buildCube()
+  if (!state.setup) return
+  const snap = currentRotationSnap()
+  for (const t of parseAlgorithm(state.setup)) {
+    renderer.performMove(remapMove(t, snap), 0)
+  }
+}
 </script>
 
 <template>
@@ -285,10 +335,27 @@ const activeFaceName = computed(() => FACES.find(f => f.code === activeFace.valu
           </div>
 
           <div class="field">
+            <div class="field-label">lock view<span class="hint">save camera angle in URL</span></div>
+            <div class="size-toggle">
+              <button class="size-btn" :class="{ active: !lockOrientation }" @click="setLockOrientation(false)">Off</button>
+              <button class="size-btn" :class="{ active: lockOrientation }" @click="setLockOrientation(true)">On</button>
+            </div>
+          </div>
+
+          <div class="field">
             <div class="field-label">algorithm<span class="hint">RUR'U' or R U R' U'</span></div>
             <textarea
               class="textarea" v-model="state.alg"
               placeholder="e.g. RUR'URU2R'"
+              autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false"
+            ></textarea>
+          </div>
+
+          <div class="field">
+            <div class="field-label">starting position<span class="hint">applied silently before play</span></div>
+            <textarea
+              class="textarea" v-model="state.setup"
+              placeholder="e.g. F R' F' R"
               autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false"
             ></textarea>
           </div>

@@ -12,6 +12,7 @@ let playbackToken = 0
 
 const state = reactive({
   alg: '',
+  setup: '',
   speed: 450,
   size: DEFAULT_SIZE,
   mask: {},
@@ -26,6 +27,29 @@ useUrlSync(state, { writeBack: false })
 
 const parsedMoves = computed(() => parseAlgorithm(state.alg))
 const showPlayer = computed(() => parsedMoves.value.length > 0)
+
+const FACES_CW = ['F', 'R', 'B', 'L']
+function currentRotationSnap() {
+  if (!state.orientation) return 0
+  return ((Math.round(state.orientation.az / 90) % 4) + 4) % 4
+}
+function remapMove(token, snap) {
+  if (!snap) return token
+  const head = token[0].toUpperCase()
+  const idx = FACES_CW.indexOf(head)
+  if (idx < 0) return token
+  return FACES_CW[(idx + snap) % 4] + token.slice(1)
+}
+
+function rebuildWithSetup() {
+  if (!renderer) return
+  renderer.buildCube()
+  if (!state.setup) return
+  const snap = currentRotationSnap()
+  for (const t of parseAlgorithm(state.setup)) {
+    renderer.performMove(remapMove(t, snap), 0)
+  }
+}
 const finished = computed(() =>
   parsedMoves.value.length > 0 && currentMoveIndex.value >= parsedMoves.value.length
 )
@@ -37,14 +61,24 @@ const editorUrl = computed(() => {
 watch(() => state.alg, () => {
   pause()
   currentMoveIndex.value = 0
-  if (renderer) renderer.buildCube()
+  rebuildWithSetup()
+  nextTick(() => play())
+})
+
+watch(() => state.setup, () => {
+  pause()
+  currentMoveIndex.value = 0
+  rebuildWithSetup()
   nextTick(() => play())
 })
 
 watch(() => state.size, n => {
   pause()
   currentMoveIndex.value = 0
-  if (renderer) renderer.setSize(n)
+  if (renderer) {
+    renderer.setSize(n)
+    rebuildWithSetup()
+  }
   nextTick(() => play())
 })
 
@@ -59,7 +93,8 @@ onMounted(() => {
   renderer = new CubeRenderer(canvas.value, state.size)
   renderer.disabledStickers = state.mask
   renderer.init()
-  if (state.orientation && !state.alg) renderer.setOrientation(state.orientation)
+  if (state.orientation) renderer.setOrientation(state.orientation)
+  if (state.setup) rebuildWithSetup()
   setTimeout(() => renderer?.resize(), 100)
   setTimeout(() => renderer?.resize(), 500)
   nextTick(() => play())
@@ -79,13 +114,13 @@ async function play() {
       await sleep(RESTART_DELAY_MS)
       if (myToken !== playbackToken) return
       currentMoveIndex.value = 0
-      renderer.buildCube()
+      rebuildWithSetup()
       await sleep(50)
       continue
     }
     const move = parsedMoves.value[currentMoveIndex.value]
     isAnimating.value = true
-    await renderer.performMove(move, state.speed)
+    await renderer.performMove(remapMove(move, currentRotationSnap()), state.speed)
     isAnimating.value = false
     if (myToken !== playbackToken) return
     currentMoveIndex.value++
@@ -95,7 +130,7 @@ function pause() { isPlaying.value = false; playbackToken++ }
 function replay() {
   pause()
   currentMoveIndex.value = 0
-  renderer?.buildCube()
+  rebuildWithSetup()
   nextTick(() => play())
 }
 function togglePlay() {
@@ -109,7 +144,7 @@ async function stepForward() {
   pause()
   const move = parsedMoves.value[currentMoveIndex.value]
   isAnimating.value = true
-  await renderer.performMove(move, state.speed)
+  await renderer.performMove(remapMove(move, currentRotationSnap()), state.speed)
   isAnimating.value = false
   currentMoveIndex.value++
 }
@@ -119,7 +154,7 @@ async function stepBack() {
   currentMoveIndex.value--
   const inv = invertMove(parsedMoves.value[currentMoveIndex.value])
   isAnimating.value = true
-  await renderer.performMove(inv, state.speed)
+  await renderer.performMove(remapMove(inv, currentRotationSnap()), state.speed)
   isAnimating.value = false
 }
 </script>

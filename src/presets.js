@@ -24,6 +24,18 @@ export const PRESETS = [
     disabled: { D: 'all' },
   },
   {
+    name: 'H-Perm',
+    size: 3,
+    algorithm: "M2 U M2 U2 M2 U M2",
+    disabled: { D: 'all', F: [3,4,5,6,7,8], B: [3,4,5,6,7,8], L: [3,4,5,6,7,8], R: [3,4,5,6,7,8] },
+  },
+  {
+    name: 'OLL · Anti-Sune (wide)',
+    size: 3,
+    algorithm: "r U2 R' U' R U' r'",
+    disabled: { D: 'all', F: [3,4,5,6,7,8], B: [3,4,5,6,7,8], L: [3,4,5,6,7,8], R: [3,4,5,6,7,8] },
+  },
+  {
     name: '2x2 OLL · Sune',
     size: 2,
     algorithm: "R U R' U R U2 R'",

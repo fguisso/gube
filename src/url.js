@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, watch } from 'vue'
 import { PRESETS, expandDisabled } from './presets.js'
 import { DEFAULT_SIZE, DEFAULT_ORIENTATION, SUPPORTED_SIZES } from './cube.js'
+import { parseAlgorithm } from './moves.js'
 
 const EMPTY_MASK = () => ({ U: [], D: [], F: [], B: [], L: [], R: [] })
 const FACES_ORDER = ['U', 'D', 'F', 'B', 'L', 'R']
@@ -21,6 +22,7 @@ export const DEFAULTS = {
   size: DEFAULT_SIZE,
   mask: EMPTY_MASK(),
   orientation: null,
+  hint: false,
 }
 
 function encodeOrientation(o) {
@@ -45,22 +47,11 @@ function encodeAlg(alg) {
   return alg.replace(/\s+/g, '').replace(/'/g, '-')
 }
 
+// Restore apostrophes, then re-tokenize so any notation (faces, wides, slices,
+// rotations) is normalized to spaced tokens for display and playback.
 function decodeAlg(s) {
   if (!s) return ''
-  const out = []
-  let i = 0
-  while (i < s.length) {
-    const ch = s[i]
-    if (!/[UDFBLR]/.test(ch)) { i++; continue }
-    let token = ch
-    i++
-    if (i < s.length && (s[i] === '-' || s[i] === "'" || s[i] === '2')) {
-      token += s[i] === '-' ? "'" : s[i]
-      i++
-    }
-    out.push(token)
-  }
-  return out.join(' ')
+  return parseAlgorithm(s.replace(/-/g, "'")).join(' ')
 }
 
 function encodeMask(mask, size) {
@@ -116,6 +107,8 @@ export function encode(state) {
     params.set('o', encodeOrientation(state.orientation))
   }
 
+  if (state.hint) params.set('h', '1')
+
   return params.toString()
 }
 
@@ -140,6 +133,8 @@ export function decode(payload) {
   if (params.has('o')) {
     out.orientation = decodeOrientation(params.get('o'))
   }
+
+  if (params.has('h')) out.hint = params.get('h') === '1'
 
   return out
 }

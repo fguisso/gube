@@ -17,6 +17,7 @@ const state = reactive({
   size: DEFAULT_SIZE,
   mask: {},
   orientation: null,
+  hint: false,
 })
 
 const isPlaying = ref(false)
@@ -35,8 +36,7 @@ function currentRotationSnap() {
 }
 function remapMove(token, snap) {
   if (!snap) return token
-  const head = token[0].toUpperCase()
-  const idx = FACES_CW.indexOf(head)
+  const idx = FACES_CW.indexOf(token[0])
   if (idx < 0) return token
   return FACES_CW[(idx + snap) % 4] + token.slice(1)
 }
@@ -89,12 +89,16 @@ watch(() => state.mask, m => {
   }
 }, { deep: true })
 
+watch(() => state.hint, v => renderer?.setHintFacelets(v))
+
 onMounted(() => {
   renderer = new CubeRenderer(canvas.value, state.size)
   renderer.disabledStickers = state.mask
+  renderer.hintFacelets = state.hint
   renderer.init()
   if (state.orientation) renderer.setOrientation(state.orientation)
   if (state.setup) rebuildWithSetup()
+  if (Object.values(state.mask).some(a => a && a.length)) renderer.flashMaskIn()
   setTimeout(() => renderer?.resize(), 100)
   setTimeout(() => renderer?.resize(), 500)
   nextTick(() => play())
@@ -188,6 +192,17 @@ async function stepBack() {
           <span v-else>▶</span>
         </button>
         <button class="ctrl-btn" @click="stepForward" :disabled="currentMoveIndex >= parsedMoves.length || isAnimating">›</button>
+        <button class="ctrl-btn" :class="{ active: state.hint }" @click="state.hint = !state.hint" :title="state.hint ? 'Hide hint facelets' : 'Show hint facelets'" aria-label="Toggle hint facelets">
+          <svg v-if="state.hint" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+            <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+            <line x1="2" y1="2" x2="22" y2="22" />
+          </svg>
+        </button>
       </div>
       <a class="embed-edit-btn" :href="editorUrl" target="_blank" rel="noopener" title="Open in editor">
         Edit ↗

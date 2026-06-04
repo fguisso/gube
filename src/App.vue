@@ -7,6 +7,7 @@ import {
   buildEmbedSnippet,
   buildShareUrl,
   encode,
+  readHash,
   useUrlSync,
 } from './url.js'
 
@@ -21,9 +22,11 @@ const state = reactive({
   size: DEFAULT_SIZE,
   mask: { U: [], D: [0,1,2,3,4,5,6,7,8], F: [3,4,5,6,7,8], B: [3,4,5,6,7,8], L: [3,4,5,6,7,8], R: [3,4,5,6,7,8] },
   orientation: null,
+  hint: false,
 })
 
 const lockOrientation = ref(false)
+const hadHintParam = /(^|&)h=/.test(readHash())
 
 const stickerCount = computed(() => state.size * state.size)
 const allStickers = computed(() => Array.from({ length: stickerCount.value }, (_, i) => i))
@@ -89,15 +92,27 @@ watch(() => state.mask, m => {
   }
 }, { deep: true })
 
+watch(() => state.hint, v => {
+  renderer?.setHintFacelets(v)
+  localStorage.setItem('gube:hint', v ? '1' : '0')
+})
+
+function maskHasAny() {
+  return Object.values(state.mask).some(arr => arr && arr.length)
+}
+
 onMounted(() => {
   renderer = new CubeRenderer(canvas.value, state.size)
   renderer.disabledStickers = state.mask
+  if (!hadHintParam) state.hint = localStorage.getItem('gube:hint') === '1'
+  renderer.hintFacelets = state.hint
   renderer.init()
   if (state.orientation) {
     lockOrientation.value = true
     renderer.setOrientation(state.orientation)
   }
   if (state.setup) rebuildWithSetup()
+  if (maskHasAny()) renderer.flashMaskIn()
   renderer.onOrientationChange = (o) => {
     if (lockOrientation.value) state.orientation = o
   }
@@ -239,8 +254,9 @@ function currentRotationSnap() {
 
 function remapMove(token, snap) {
   if (!snap) return token
-  const head = token[0].toUpperCase()
-  const idx = FACES_CW.indexOf(head)
+  // Only the four side faces (incl. their wides, e.g. Rw) rotate with the view;
+  // slices, rotations and lowercase wides are left as-is.
+  const idx = FACES_CW.indexOf(token[0])
   if (idx < 0) return token
   return FACES_CW[(idx + snap) % 4] + token.slice(1)
 }
@@ -264,6 +280,17 @@ function rebuildWithSetup() {
           <BrandWordmark label="gube" :width="92" />
         </a>
         <div class="top-bar-spacer"></div>
+        <button class="header-btn" :class="{ active: state.hint }" @click="state.hint = !state.hint" :title="state.hint ? 'Hide hint facelets' : 'Show hint facelets'" aria-label="Toggle hint facelets">
+          <svg v-if="state.hint" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+            <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+            <line x1="2" y1="2" x2="22" y2="22" />
+          </svg>
+        </button>
         <button class="header-btn" @click="openShare" title="Share" aria-label="Share">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="18" cy="5" r="3" />
@@ -339,6 +366,14 @@ function rebuildWithSetup() {
             <div class="size-toggle">
               <button class="size-btn" :class="{ active: !lockOrientation }" @click="setLockOrientation(false)">Off</button>
               <button class="size-btn" :class="{ active: lockOrientation }" @click="setLockOrientation(true)">On</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">hint facelets<span class="hint">show hidden faces</span></div>
+            <div class="size-toggle">
+              <button class="size-btn" :class="{ active: !state.hint }" @click="state.hint = false">Off</button>
+              <button class="size-btn" :class="{ active: state.hint }" @click="state.hint = true">On</button>
             </div>
           </div>
 

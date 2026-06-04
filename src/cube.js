@@ -1,6 +1,10 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { resolveMove, parseAlgorithm, invertMove } from './moves.js'
+
+// Re-exported so existing imports from './cube.js' keep working.
+export { parseAlgorithm, invertMove }
 
 export const COLORS = {
   U: '#ffe14a', D: '#f8f8f4', F: '#5cd66b', B: '#4a8eff',
@@ -16,40 +20,6 @@ export const FACES = [
 export const SUPPORTED_SIZES = [2, 3]
 export const DEFAULT_SIZE = 3
 export const DEFAULT_ORIENTATION = { az: 38, pol: 58 }
-
-const MOVE_RE = /[UDFBLR](?:'|2)?/g
-
-export function parseAlgorithm(str) {
-  if (!str) return []
-  return str.match(MOVE_RE) || []
-}
-
-export function invertMove(t) {
-  if (t.endsWith("'")) return t.slice(0, -1)
-  if (t.endsWith('2')) return t
-  return t + "'"
-}
-
-function moveDefs(N) {
-  const top = N - 1
-  return {
-    U: { axis: 'y', layer: top, angle: -Math.PI / 2 },
-    D: { axis: 'y', layer: 0,   angle:  Math.PI / 2 },
-    R: { axis: 'x', layer: top, angle: -Math.PI / 2 },
-    L: { axis: 'x', layer: 0,   angle:  Math.PI / 2 },
-    F: { axis: 'z', layer: top, angle: -Math.PI / 2 },
-    B: { axis: 'z', layer: 0,   angle:  Math.PI / 2 },
-  }
-}
-
-function parseMoveToken(token, N) {
-  const def = moveDefs(N)[token[0].toUpperCase()]
-  if (!def) return null
-  let angle = def.angle
-  if (token.includes("'")) angle = -angle
-  if (token.includes('2')) angle *= 2
-  return { axis: def.axis, layer: def.layer, angle, label: token }
-}
 
 function stickerIndexFor(face, x, y, z, N) {
   const last = N - 1
@@ -83,11 +53,14 @@ export class CubeRenderer {
     this.cubies = []
     this.rotatingGroup = null
     this.disabledStickers = { U: [], D: [], F: [], B: [], L: [], R: [] }
+    this.hintFacelets = false
     this._frame = null
     this._ro = null
     this._sharedBodyGeom = null
     this._sharedBodyMat = null
     this._sharedStickerGeom = null
+    this._sharedHintGeom = null
+    this._fading = false
     this.onOrientationChange = null
     this._onWindowResize = () => this.resize()
     this._onOrientation = () => setTimeout(() => this.resize(), 200)
@@ -193,6 +166,7 @@ export class CubeRenderer {
 
   _animate() {
     this._frame = requestAnimationFrame(() => this._animate())
+    if (this._fading) this._stepFade()
     this.controls.update()
     this.renderer.render(this.scene, this.camera)
   }
@@ -201,6 +175,7 @@ export class CubeRenderer {
     this.cubies.forEach(c => {
       this.scene.remove(c.group)
       Object.values(c.stickers).forEach(s => s.material.dispose())
+      Object.values(c.hints || {}).forEach(h => h.material.dispose())
     })
     this.cubies = []
 
@@ -214,12 +189,16 @@ export class CubeRenderer {
     const stickerRadius = 0.10
     const stickerOffset = cubieSize / 2 + 0.001
 
+    // Hint facelets float outward along the face normal, beyond the cube body.
+    const hintOffset = cubieSize / 2 + 0.9
+
     if (!this._sharedBodyGeom) {
       this._sharedBodyGeom = new RoundedBoxGeometry(cubieSize, cubieSize, cubieSize, 3, cubieRadius)
       this._sharedBodyMat = new THREE.MeshStandardMaterial({
         color: COLORS.K, roughness: 0.6, metalness: 0.0,
       })
       this._sharedStickerGeom = new RoundedBoxGeometry(stickerSize, stickerSize, 0.02, 3, stickerRadius)
+      this._sharedHintGeom = new THREE.PlaneGeometry(stickerSize, stickerSize)
     }
 
     for (let xi = 0; xi <= last; xi++) {
@@ -239,13 +218,14 @@ export class CubeRenderer {
           group.add(body)
 
           const stickers = {}
+          const hints = {}
           const faceConfigs = [
-            { face: 'R', cond: xi === last, pos: [ stickerOffset, 0, 0], rot: [0,  Math.PI / 2, 0] },
-            { face: 'L', cond: xi === 0,    pos: [-stickerOffset, 0, 0], rot: [0, -Math.PI / 2, 0] },
-            { face: 'U', cond: yi === last, pos: [0,  stickerOffset, 0], rot: [-Math.PI / 2, 0, 0] },
-            { face: 'D', cond: yi === 0,    pos: [0, -stickerOffset, 0], rot: [ Math.PI / 2, 0, 0] },
-            { face: 'F', cond: zi === last, pos: [0, 0,  stickerOffset], rot: [0, 0, 0] },
-            { face: 'B', cond: zi === 0,    pos: [0, 0, -stickerOffset], rot: [0, Math.PI, 0] },
+            { face: 'R', cond: xi === last, dir: [ 1, 0, 0], rot: [0,  Math.PI / 2, 0] },
+            { face: 'L', cond: xi === 0,    dir: [-1, 0, 0], rot: [0, -Math.PI / 2, 0] },
+            { face: 'U', cond: yi === last, dir: [0,  1, 0], rot: [-Math.PI / 2, 0, 0] },
+            { face: 'D', cond: yi === 0,    dir: [0, -1, 0], rot: [ Math.PI / 2, 0, 0] },
+            { face: 'F', cond: zi === last, dir: [0, 0,  1], rot: [0, 0, 0] },
+            { face: 'B', cond: zi === 0,    dir: [0, 0, -1], rot: [0, Math.PI, 0] },
           ]
 
           faceConfigs.forEach(fc => {
@@ -255,15 +235,29 @@ export class CubeRenderer {
               roughness: 0.32, metalness: 0.0,
             })
             const sticker = new THREE.Mesh(this._sharedStickerGeom, stickerMat)
-            sticker.position.set(...fc.pos)
+            sticker.position.set(fc.dir[0] * stickerOffset, fc.dir[1] * stickerOffset, fc.dir[2] * stickerOffset)
             sticker.rotation.set(...fc.rot)
             group.add(sticker)
             stickers[fc.face] = sticker
+
+            // Floating hint facelet (cubing.js technique): coplanar quad pushed
+            // further out, rendered BackSide so it's only seen from the far side.
+            const hintMat = new THREE.MeshBasicMaterial({
+              color: COLORS[fc.face],
+              transparent: true, opacity: 0.5,
+              side: THREE.BackSide, depthWrite: false,
+            })
+            const hint = new THREE.Mesh(this._sharedHintGeom, hintMat)
+            hint.position.set(fc.dir[0] * hintOffset, fc.dir[1] * hintOffset, fc.dir[2] * hintOffset)
+            hint.rotation.set(...fc.rot)
+            hint.visible = this.hintFacelets
+            group.add(hint)
+            hints[fc.face] = hint
           })
 
           this.scene.add(group)
           this.cubies.push({
-            group, stickers,
+            group, stickers, hints,
             logical: { x: xi, y: yi, z: zi },
             home: { x: xi, y: yi, z: zi },
           })
@@ -278,24 +272,80 @@ export class CubeRenderer {
     this.applyDisabledMask()
   }
 
-  applyDisabledMask() {
+  applyDisabledMask(animate = false) {
     const N = this.size
+    const apply = (mat, targetHex) => {
+      if (animate) {
+        mat.userData.from = mat.color.clone()
+        mat.userData.target = new THREE.Color(targetHex)
+      } else {
+        mat.color.set(targetHex)
+        mat.userData.from = null
+        mat.userData.target = null
+      }
+    }
     this.cubies.forEach(c => {
       const { x, y, z } = c.home
       Object.entries(c.stickers).forEach(([face, mesh]) => {
         const idx = stickerIndexFor(face, x, y, z, N)
         const arr = this.disabledStickers[face]
         const isDis = Array.isArray(arr) ? arr.includes(idx) : !!arr?.has?.(idx)
-        mesh.material.color.set(isDis ? COLORS.X : COLORS[face])
+        const target = isDis ? COLORS.X : COLORS[face]
+        apply(mesh.material, target)
+        const hint = c.hints?.[face]
+        if (hint) apply(hint.material, target)
       })
     })
+    if (animate) {
+      this._fadeStart = performance.now()
+      this._fading = true
+    }
+  }
+
+  // Fade the highlight in from a fully-colored cube to the current mask.
+  flashMaskIn() {
+    this.cubies.forEach(c => {
+      Object.entries(c.stickers).forEach(([face, m]) => m.material.color.set(COLORS[face]))
+      Object.entries(c.hints || {}).forEach(([face, h]) => h.material.color.set(COLORS[face]))
+    })
+    this.applyDisabledMask(true)
+  }
+
+  setHintFacelets(on) {
+    this.hintFacelets = !!on
+    this.cubies.forEach(c => {
+      Object.values(c.hints || {}).forEach(h => { h.visible = this.hintFacelets })
+    })
+  }
+
+  _stepFade() {
+    const dur = 280
+    const t = Math.min(1, (performance.now() - this._fadeStart) / dur)
+    const ease = t * (2 - t)
+    const tint = mat => {
+      if (!mat.userData.target || !mat.userData.from) return
+      mat.color.copy(mat.userData.from).lerp(mat.userData.target, ease)
+    }
+    this.cubies.forEach(c => {
+      Object.values(c.stickers).forEach(s => tint(s.material))
+      Object.values(c.hints || {}).forEach(h => tint(h.material))
+    })
+    if (t >= 1) {
+      this._fading = false
+      const clear = mat => { mat.userData.from = null }
+      this.cubies.forEach(c => {
+        Object.values(c.stickers).forEach(s => clear(s.material))
+        Object.values(c.hints || {}).forEach(h => clear(h.material))
+      })
+    }
   }
 
   performMove(token, durationMs) {
     return new Promise(resolve => {
-      const move = parseMoveToken(token, this.size)
+      const move = resolveMove(token, this.size)
       if (!move) { resolve(); return }
-      const layerCubies = this.cubies.filter(c => c.logical[move.axis] === move.layer)
+      const layerSet = new Set(move.layers)
+      const layerCubies = this.cubies.filter(c => layerSet.has(c.logical[move.axis]))
       this.rotatingGroup = new THREE.Group()
       this.scene.add(this.rotatingGroup)
       layerCubies.forEach(c => this.rotatingGroup.attach(c.group))
